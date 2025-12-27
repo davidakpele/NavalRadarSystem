@@ -4,6 +4,8 @@
 
 The Naval Acoustic Radar System is a real-time audio visualization application that transforms stereo microphone input into a military-grade radar display. The system detects sounds in your environment and displays them on a sweeping radar interface, calculating both the direction (bearing) and relative distance of audio sources.
 
+![Screenshot](./results/1/r.png)
+
 ## What It Does
 
 This application creates an immersive sonar/radar experience by:
