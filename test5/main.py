@@ -10,8 +10,9 @@ import os
 import random
 
 WIDTH, HEIGHT = 1600, 900
-CENTER = (450, HEIGHT // 2)
-RADAR_RADIUS = 350
+CENTER = (450, HEIGHT // 2)  
+RADAR_RADIUS = 350 
+RADAR_CENTER = (450, HEIGHT // 2)  
 FPS = 60
 FS = 44100 
 CHANNELS = 2
@@ -33,6 +34,7 @@ ORANGE = (255, 165, 0)
 BLUE = (100, 150, 255)
 PURPLE = (200, 100, 255)
 WHITE = (255, 255, 255)
+GRAY = (100, 100, 100)
 
 # Detection Modes
 class DetectionMode:
@@ -45,7 +47,7 @@ class DetectionMode:
 # System state
 current_mode = DetectionMode.PASSIVE
 sweep_angle = 0
-narrow_beam_angle = 0  # User-controlled beam direction
+narrow_beam_angle = 0  
 sonar_pulse_time = 0
 sonar_echo_targets = []
 
@@ -67,8 +69,68 @@ current_noise_data = {
     "detected_sounds": [],
     "primary_threat": "NEUTRAL",
     "confidence": 0.0,
-    "range_estimate": 0.0  # For active sonar
+    "range_estimate": 0.0  
 }
+
+# Draggable panel system
+class DraggablePanel:
+    def __init__(self, x, y, width, height, title="Panel", color=BLACK, border_color=GREEN):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.title = title
+        self.color = color
+        self.border_color = border_color
+        self.dragging = False
+        self.drag_offset = (0, 0)
+        self.visible = True
+        
+    def handle_event(self, event):
+        if not self.visible:
+            return False
+            
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                title_rect = pygame.Rect(self.rect.x, self.rect.y, self.rect.width, 25)
+                if title_rect.collidepoint(event.pos):
+                    self.dragging = True
+                    self.drag_offset = (event.pos[0] - self.rect.x, event.pos[1] - self.rect.y)
+                    return True
+                    
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                self.dragging = False
+                
+        elif event.type == pygame.MOUSEMOTION:
+            if self.dragging:
+                self.rect.x = event.pos[0] - self.drag_offset[0]
+                self.rect.y = event.pos[1] - self.drag_offset[1]
+                # Keep panel within screen bounds
+                self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
+                self.rect.y = max(0, min(self.rect.y, HEIGHT - self.rect.height))
+                return True
+                
+        return False
+        
+    def draw(self, screen):
+        if not self.visible:
+            return
+            
+        # Draw panel background
+        pygame.draw.rect(screen, self.color, self.rect)
+        
+        # Draw title bar
+        title_rect = pygame.Rect(self.rect.x, self.rect.y, self.rect.width, 25)
+        pygame.draw.rect(screen, DARK_GREEN, title_rect)
+        pygame.draw.rect(screen, self.border_color, title_rect, 1)
+        
+        # Draw title
+        font_title = pygame.font.SysFont("Courier New", 13, bold=True)
+        title_text = font_title.render(self.title, True, CYAN)
+        screen.blit(title_text, (self.rect.x + 10, self.rect.y + 5))
+        
+        # Draw panel border
+        pygame.draw.rect(screen, self.border_color, self.rect, 2)
+        
+        return title_rect
 
 class ModeConfig:
     """Configuration for each detection mode"""
@@ -79,7 +141,7 @@ class ModeConfig:
             DetectionMode.PASSIVE: {
                 "name": "PASSIVE",
                 "description": "Stealth listening",
-                "detection_arc": 60,  # degrees
+                "detection_arc": 60,  
                 "range_multiplier": 1.0,
                 "accuracy": 0.7,
                 "sweep_speed": 3,
@@ -122,7 +184,7 @@ class ModeConfig:
                 "detection_arc": 360,
                 "range_multiplier": 0.5,
                 "accuracy": 0.3,
-                "sweep_speed": 0,  # No sweep needed
+                "sweep_speed": 0,  
                 "color": BLUE,
                 "shows_true_distance": False
             }
@@ -383,6 +445,18 @@ class TargetManager:
 
 target_manager = TargetManager()
 
+# Create draggable panels
+panels = [
+    DraggablePanel(500, 10, 280, 220, "DETECTION MODE", BLACK, GREEN),
+    DraggablePanel(500, 240, 280, 140, "SYSTEM STATUS", BLACK, GREEN),
+    DraggablePanel(500, 390, 280, 140, "OWN SHIP DATA", BLACK, GREEN),
+    DraggablePanel(500, 540, 280, 350, "TRACKED TARGETS", BLACK, GREEN),
+    DraggablePanel(WIDTH - 320, 10, 310, 120, "ACOUSTIC SENSOR", BLACK, GREEN),
+]
+
+# Variable to store which panel is currently being dragged
+dragged_panel = None
+
 class MultiSoundClassifier:
     @staticmethod
     def analyze_audio(audio_data, sample_rate):
@@ -463,9 +537,6 @@ def send_sonar_pulse():
     global sonar_pulse_time, sonar_echo_targets
     sonar_pulse_time = pygame.time.get_ticks()
     sonar_echo_targets = []
-    
-    # Play short beep sound (simulated)
-    # In real implementation, would play actual audio through speakers
 
 def audio_callback(indata, frames, time, status):
     global current_noise_data
@@ -507,17 +578,35 @@ def draw_radar_background():
     config = ModeConfig.get_config(current_mode)
     mode_color = config["color"]
     
-    # Draw range rings
-    for i in range(1, 5):
-        pygame.draw.circle(screen, DARK_GREEN, CENTER, (RADAR_RADIUS // 4) * i, 1)
+    radar_rect = pygame.Rect(RADAR_CENTER[0] - RADAR_RADIUS - 50, 
+                             RADAR_CENTER[1] - RADAR_RADIUS - 50,
+                             (RADAR_RADIUS + 50) * 2, 
+                             (RADAR_RADIUS + 50) * 2)
+    pygame.draw.rect(screen, BLACK, radar_rect)
+    pygame.draw.rect(screen, GREEN, radar_rect, 2)
     
-    # Draw radial lines
+    # Concentric circles
+    for i in range(1, 5):
+        pygame.draw.circle(screen, DARK_GREEN, RADAR_CENTER, (RADAR_RADIUS // 4) * i, 1)
+    
+    # Main circle
+    pygame.draw.circle(screen, GREEN, RADAR_CENTER, RADAR_RADIUS, 2)
+    
+    # Radial lines
     for i in range(0, 360, 30):
         rad = math.radians(i)
-        dest = (int(CENTER[0] + math.cos(rad) * RADAR_RADIUS), 
-                int(CENTER[1] + math.sin(rad) * RADAR_RADIUS))
-        pygame.draw.line(screen, DARK_GREEN, CENTER, dest, 1)
+        dest = (int(RADAR_CENTER[0] + math.cos(rad) * RADAR_RADIUS), 
+                int(RADAR_CENTER[1] + math.sin(rad) * RADAR_RADIUS))
+        pygame.draw.line(screen, DARK_GREEN, RADAR_CENTER, dest, 1)
     
+    # Range rings labels
+    font_small = pygame.font.SysFont("Courier New", 12, bold=True)
+    for i in range(1, 5):
+        radius = (RADAR_RADIUS // 4) * i
+        range_nm = i * 5  # 5 NM per ring
+        label = font_small.render(f"{range_nm}NM", True, DARK_GREEN)
+        screen.blit(label, (RADAR_CENTER[0] + radius + 5, RADAR_CENTER[1] - 10))
+        
     # Draw detection arc based on mode
     if current_mode == DetectionMode.NARROW_BEAM:
         # Draw narrow beam cone
@@ -546,7 +635,7 @@ def draw_radar_background():
     # Draw sonar pulse rings if active
     if current_mode == DetectionMode.ACTIVE_SONAR:
         time_since_pulse = pygame.time.get_ticks() - sonar_pulse_time
-        if time_since_pulse < 2000:  # Show pulse for 2 seconds
+        if time_since_pulse < 2000:  
             # Expanding ring
             pulse_radius = int((time_since_pulse / 2000.0) * RADAR_RADIUS)
             pulse_alpha = int(255 * (1 - time_since_pulse / 2000.0))
@@ -573,13 +662,13 @@ def draw_sweep_line():
     else:
         # Normal sweep with trail
         for i in range(15):
-            alpha = 255 - (i * 15)
-            trail_angle = math.radians(sweep_angle - i)
+            alpha = max(10, 255 - (i * 10))
+            trail_angle = math.radians(sweep_angle - i * 2)
             tx = int(CENTER[0] + math.cos(trail_angle) * RADAR_RADIUS)
             ty = int(CENTER[1] + math.sin(trail_angle) * RADAR_RADIUS)
             
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            pygame.draw.line(s, (*mode_color, alpha), CENTER, (tx, ty), 3)
+            pygame.draw.line(s, (0, 255, 65, alpha), RADAR_CENTER, (tx, ty), 2)
             screen.blit(s, (0,0))
 
 def draw_target(target):
@@ -657,21 +746,16 @@ def draw_target(target):
     id_surf = font_tiny.render(id_text, True, color)
     screen.blit(id_surf, (pos[0] + 12, pos[1] - 8))
 
-def draw_mode_selector():
+def draw_mode_selector(panel):
     """Draw mode selection panel"""
-    panel_x, panel_y = 10, 10
-    panel_width, panel_height = 280, 220
-    
-    pygame.draw.rect(screen, BLACK, (panel_x, panel_y, panel_width, panel_height))
-    pygame.draw.rect(screen, GREEN, (panel_x, panel_y, panel_width, panel_height), 2)
-    
     font_title = pygame.font.SysFont("Courier New", 13, bold=True)
     font_mode = pygame.font.SysFont("Courier New", 10, bold=True)
     
-    title = font_title.render("DETECTION MODE", True, CYAN)
-    screen.blit(title, (panel_x + 10, panel_y + 8))
+    # Draw the panel background
+    title_rect = panel.draw(screen)
     
-    y = panel_y + 30
+    # Draw content inside panel
+    y = panel.rect.y + 30
     
     modes = [
         (DetectionMode.PASSIVE, "1"),
@@ -687,25 +771,25 @@ def draw_mode_selector():
         
         # Mode indicator
         if is_current:
-            pygame.draw.rect(screen, config["color"], (panel_x + 10, y, 10, 10))
-            pygame.draw.rect(screen, WHITE, (panel_x + 10, y, 10, 10), 2)
+            pygame.draw.rect(screen, config["color"], (panel.rect.x + 10, y, 10, 10))
+            pygame.draw.rect(screen, WHITE, (panel.rect.x + 10, y, 10, 10), 2)
         else:
-            pygame.draw.rect(screen, config["color"], (panel_x + 10, y, 10, 10), 1)
+            pygame.draw.rect(screen, config["color"], (panel.rect.x + 10, y, 10, 10), 1)
         
         # Mode name
         mode_color = config["color"] if is_current else DARK_GREEN
         mode_text = font_mode.render(f"{key}: {config['name']}", True, mode_color)
-        screen.blit(mode_text, (panel_x + 25, y - 2))
+        screen.blit(mode_text, (panel.rect.x + 25, y - 2))
         
         # Description
         desc_text = font_mode.render(f"   {config['description']}", True, DARK_GREEN)
-        screen.blit(desc_text, (panel_x + 25, y + 10))
+        screen.blit(desc_text, (panel.rect.x + 25, y + 10))
         
         y += 35
     
     # Additional info
     y += 10
-    pygame.draw.line(screen, DARK_GREEN, (panel_x + 10, y), (panel_x + panel_width - 10, y), 1)
+    pygame.draw.line(screen, DARK_GREEN, (panel.rect.x + 10, y), (panel.rect.x + panel.rect.width - 10, y), 1)
     y += 10
     
     info_lines = [
@@ -715,26 +799,21 @@ def draw_mode_selector():
     
     for line in info_lines:
         info = font_mode.render(line, True, CYAN)
-        screen.blit(info, (panel_x + 10, y))
+        screen.blit(info, (panel.rect.x + 10, y))
         y += 15
 
-def draw_system_status():
+def draw_system_status(panel):
     """Draw system status panel"""
-    panel_x, panel_y = 10, 240
-    panel_width, panel_height = 280, 140
-    
-    pygame.draw.rect(screen, BLACK, (panel_x, panel_y, panel_width, panel_height))
-    pygame.draw.rect(screen, GREEN, (panel_x, panel_y, panel_width, panel_height), 2)
-    
     font_title = pygame.font.SysFont("Courier New", 13, bold=True)
     font_data = pygame.font.SysFont("Courier New", 11, bold=True)
     
-    title = font_title.render("SYSTEM STATUS", True, CYAN)
-    screen.blit(title, (panel_x + 10, panel_y + 8))
+    # Draw the panel background
+    panel.draw(screen)
     
-    y = panel_y + 30
-    
+    # Draw content
     config = ModeConfig.get_config(current_mode)
+    
+    y = panel.rect.y + 30
     
     status = [
         ("MODE:", config["name"]),
@@ -747,25 +826,20 @@ def draw_system_status():
     for label, value in status:
         label_surf = font_data.render(label, True, GREEN)
         value_surf = font_data.render(value, True, CYAN)
-        screen.blit(label_surf, (panel_x + 10, y))
-        screen.blit(value_surf, (panel_x + 150, y))
+        screen.blit(label_surf, (panel.rect.x + 10, y))
+        screen.blit(value_surf, (panel.rect.x + 150, y))
         y += 22
 
-def draw_own_ship_data():
+def draw_own_ship_data(panel):
     """Draw own ship data panel"""
-    panel_x, panel_y = 10, 390
-    panel_width, panel_height = 280, 140
-    
-    pygame.draw.rect(screen, BLACK, (panel_x, panel_y, panel_width, panel_height))
-    pygame.draw.rect(screen, GREEN, (panel_x, panel_y, panel_width, panel_height), 2)
-    
     font_title = pygame.font.SysFont("Courier New", 13, bold=True)
     font_data = pygame.font.SysFont("Courier New", 11, bold=True)
     
-    title = font_title.render("OWN SHIP DATA", True, CYAN)
-    screen.blit(title, (panel_x + 10, panel_y + 8))
+    # Draw the panel background
+    panel.draw(screen)
     
-    y = panel_y + 30
+    # Draw content
+    y = panel.rect.y + 30
     
     # Simulate slight changes
     own_ship["heading"] = (own_ship["heading"] + random.uniform(-0.1, 0.1)) % 360
@@ -782,42 +856,38 @@ def draw_own_ship_data():
     for label, value in data:
         label_surf = font_data.render(label, True, GREEN)
         value_surf = font_data.render(value, True, CYAN)
-        screen.blit(label_surf, (panel_x + 10, y))
-        screen.blit(value_surf, (panel_x + 150, y))
+        screen.blit(label_surf, (panel.rect.x + 10, y))
+        screen.blit(value_surf, (panel.rect.x + 150, y))
         y += 22
 
-def draw_tracked_targets():
+def draw_tracked_targets(panel):
     """Draw tracked targets panel"""
-    panel_x, panel_y = 10, 540
-    panel_width, panel_height = 280, 350
-    
-    pygame.draw.rect(screen, BLACK, (panel_x, panel_y, panel_width, panel_height))
-    pygame.draw.rect(screen, GREEN, (panel_x, panel_y, panel_width, panel_height), 2)
-    
     font_title = pygame.font.SysFont("Courier New", 13, bold=True)
     font_header = pygame.font.SysFont("Courier New", 10, bold=True)
     font_data = pygame.font.SysFont("Courier New", 9, bold=True)
     
-    title = font_title.render("TRACKED TARGETS", True, CYAN)
-    screen.blit(title, (panel_x + 10, panel_y + 8))
+    # Draw the panel background
+    panel.draw(screen)
+    
+    # Draw content
+    y = panel.rect.y + 30
     
     # Headers
-    y = panel_y + 30
     headers = ["ID", "RNG", "BRG", "VEL", "THR"]
     header_x = [10, 60, 110, 160, 220]
     
     for i, header in enumerate(headers):
         header_surf = font_header.render(header, True, GREEN)
-        screen.blit(header_surf, (panel_x + header_x[i], y))
+        screen.blit(header_surf, (panel.rect.x + header_x[i], y))
     
     y += 18
-    pygame.draw.line(screen, GREEN, (panel_x + 10, y), (panel_x + panel_width - 10, y), 1)
+    pygame.draw.line(screen, GREEN, (panel.rect.x + 10, y), (panel.rect.x + panel.rect.width - 10, y), 1)
     y += 8
     
     # Target data
     sorted_targets = sorted(target_manager.targets.values(), key=lambda t: t.distance)
     
-    for target in sorted_targets[:15]:  # Show max 15 targets
+    for target in sorted_targets[:15]: 
         color = target.get_color()
         
         data = [
@@ -830,36 +900,31 @@ def draw_tracked_targets():
         
         for i, text in enumerate(data):
             text_surf = font_data.render(text, True, color)
-            screen.blit(text_surf, (panel_x + header_x[i], y))
+            screen.blit(text_surf, (panel.rect.x + header_x[i], y))
         
         y += 16
-        if y > panel_y + panel_height - 20:
+        if y > panel.rect.y + panel.rect.height - 20:
             break
 
-def draw_acoustic_sensor():
+def draw_acoustic_sensor(panel):
     """Draw acoustic sensor display"""
-    panel_x, panel_y = WIDTH - 320, 10
-    panel_width, panel_height = 310, 120
-    
-    pygame.draw.rect(screen, BLACK, (panel_x, panel_y, panel_width, panel_height))
-    pygame.draw.rect(screen, GREEN, (panel_x, panel_y, panel_width, panel_height), 2)
-    
     font_title = pygame.font.SysFont("Courier New", 13, bold=True)
     font_data = pygame.font.SysFont("Courier New", 11, bold=True)
     
-    title = font_title.render("ACOUSTIC SENSOR", True, CYAN)
-    screen.blit(title, (panel_x + 10, panel_y + 8))
+    # Draw the panel background
+    panel.draw(screen)
     
-    y = panel_y + 30
+    # Draw content
+    y = panel.rect.y + 30
     
     # Signal strength bar
     bar_width = int(current_noise_data["intensity"] * 250)
     bar_color = GREEN if current_noise_data["intensity"] < 0.7 else RED
-    pygame.draw.rect(screen, bar_color, (panel_x + 10, y, bar_width, 15))
-    pygame.draw.rect(screen, GREEN, (panel_x + 10, y, 250, 15), 1)
+    pygame.draw.rect(screen, bar_color, (panel.rect.x + 10, y, bar_width, 15))
+    pygame.draw.rect(screen, GREEN, (panel.rect.x + 10, y, 250, 15), 1)
     
     signal_text = font_data.render(f"{current_noise_data['intensity']:.2f}", True, CYAN)
-    screen.blit(signal_text, (panel_x + 265, y))
+    screen.blit(signal_text, (panel.rect.x + 265, y))
     
     y += 25
     
@@ -872,12 +937,12 @@ def draw_acoustic_sensor():
     for label, value in info:
         label_surf = font_data.render(label, True, GREEN)
         value_surf = font_data.render(value, True, CYAN)
-        screen.blit(label_surf, (panel_x + 10, y))
-        screen.blit(value_surf, (panel_x + 150, y))
+        screen.blit(label_surf, (panel.rect.x + 10, y))
+        screen.blit(value_surf, (panel.rect.x + 150, y))
         y += 20
 
 def main():
-    global sweep_angle, current_mode, narrow_beam_angle
+    global sweep_angle, current_mode, narrow_beam_angle, dragged_panel
     
     with stream:
         running = True
@@ -912,7 +977,25 @@ def main():
                         print("Export all feature - not implemented in this demo")
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
-                        target_manager.select_target_at(event.pos)
+                        # Check if clicked on any panel
+                        panel_clicked = False
+                        for panel in panels:
+                            if panel.handle_event(event):
+                                panel_clicked = True
+                                dragged_panel = panel
+                                break
+                        
+                        # Only select target if not clicking on panel
+                        if not panel_clicked:
+                            target_manager.select_target_at(event.pos)
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 1:
+                        for panel in panels:
+                            panel.handle_event(event)
+                        dragged_panel = None
+                elif event.type == pygame.MOUSEMOTION:
+                    for panel in panels:
+                        panel.handle_event(event)
 
             draw_radar_background()
             draw_sweep_line()
@@ -965,12 +1048,17 @@ def main():
             for target in target_manager.targets.values():
                 draw_target(target)
             
-            # Draw UI panels
-            draw_mode_selector()
-            draw_system_status()
-            draw_own_ship_data()
-            draw_tracked_targets()
-            draw_acoustic_sensor()
+            # Draw UI panels (in specific order)
+            draw_acoustic_sensor(panels[4])  # ACOUSTIC SENSOR
+            draw_mode_selector(panels[0])    # DETECTION MODE
+            draw_system_status(panels[1])    # SYSTEM STATUS
+            draw_own_ship_data(panels[2])    # OWN SHIP DATA
+            draw_tracked_targets(panels[3])  # TRACKED TARGETS
+            
+            # Draw instructions
+            font_inst = pygame.font.SysFont("Courier New", 10, bold=True)
+            inst_text = font_inst.render("Drag panel title bars to move. Click to select targets.", True, GRAY)
+            screen.blit(inst_text, (10, HEIGHT - 20))
             
             pygame.display.flip()
             
