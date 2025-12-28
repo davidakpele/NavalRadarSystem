@@ -1,0 +1,4 @@
+timestamp,id,bearing,range_nm,velocity,threat_level,sound_types,intensity
+2025-12-28T03:05:41.703435,13,15.4,0.45,24.7,NEUTRAL,Voice/Machinery,0.21
+2025-12-28T03:05:41.703435,14,-12.7,0.22,0.0,UNKNOWN,Voice/Engine Low,0.10
+2025-12-28T03:05:41.703435,15,16.5,0.23,0.0,UNKNOWN,Voice/Engine Low,0.11

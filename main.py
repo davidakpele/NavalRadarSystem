@@ -33,6 +33,14 @@ os.makedirs("sessions", exist_ok=True)
 os.makedirs("screenshots", exist_ok=True)
 os.makedirs("exports", exist_ok=True)
 
+# Verify directories were created
+print("[SYSTEM] Checking directories...")
+for dir_name in ["recordings", "sessions", "screenshots", "exports"]:
+    if os.path.exists(dir_name):
+        print(f"  ✓ {dir_name}/")
+    else:
+        print(f"  ✗ {dir_name}/ (FAILED TO CREATE)")
+        
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Advanced Naval Acoustic Radar - Multi-Mode System v2.0")
@@ -587,7 +595,6 @@ class SessionData:
         if self.metadata is None:
             self.metadata = {}
 
-
 # ============================================================================
 # 3D VISUALIZATION
 # ============================================================================
@@ -1022,32 +1029,36 @@ class SessionRecorder:
         print(f"[RECORDER] Started session: {session_id}")
         
     def stop_recording(self):
-            """Stop recording and save session"""
-            if not self.recording or not self.session_data:
-                return None
-                
-            self.recording = False
-            self.session_data.end_time = time.time()
+        """Stop recording and save session"""
+        if not self.recording or not self.session_data:
+            return None  # Only return if NOT recording
             
-            # Save session data
-            session_file = f"sessions/session_{self.session_data.session_id}.json"
-            self._save_session(session_file)
-            
-            # Save video if enabled
-            if self.record_video and len(self.frame_buffer) > 0:
-                video_file = f"recordings/video_{self.session_data.session_id}.mp4"
-                self._save_video(video_file)
-            
-            # Save audio if enabled
-            if self.record_audio and len(self.audio_buffer) > 0:
-                audio_file = f"recordings/audio_{self.session_data.session_id}.wav"
-                self._save_audio(audio_file)
-            
-            print(f"[RECORDER] Stopped session: {self.session_data.session_id}")
-            print(f"[RECORDER] Target events: {len(self.session_data.target_history)}")
-            print(f"[RECORDER] Audio samples: {len(self.audio_buffer)}")
-            print(f"[RECORDER] Frames buffered: {len(self.frame_buffer)}")
-            return self.session_data.session_id
+        self.recording = False
+        self.session_data.end_time = time.time()
+        
+        # Save session data
+        session_file = f"sessions/session_{self.session_data.session_id}.json"
+        self._save_session(session_file)
+        
+        # Save video if enabled
+        if self.record_video and len(self.frame_buffer) > 0:
+            video_file = f"recordings/video_{self.session_data.session_id}.mp4"
+            self._save_video(video_file)
+        
+        # Save audio if enabled
+        if self.record_audio and len(self.audio_buffer) > 0:
+            audio_file = f"recordings/audio_{self.session_data.session_id}.wav"
+            self._save_audio(audio_file)
+        
+        print(f"[RECORDER] Stopped session: {self.session_data.session_id}")
+        print(f"[RECORDER] Target events: {len(self.session_data.target_history)}")
+        print(f"[RECORDER] Audio samples: {len(self.audio_buffer)}")
+        print(f"[RECORDER] Frames buffered: {len(self.frame_buffer)}")
+        
+        # Print where files were saved
+        print(f"[RECORDER] Session saved to: {session_file}")
+        
+        return self.session_data.session_id
           
     def add_frame(self, surface):
         """Add a frame to the recording buffer"""
@@ -1162,6 +1173,9 @@ class DataExporter:
     def export_csv(targets, filename):
         """Export current targets to CSV"""
         try:
+            # Ensure exports directory exists
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            
             with open(filename, 'w', newline='') as csvfile:
                 fieldnames = ['timestamp', 'id', 'bearing', 'range_nm', 'velocity', 
                              'threat_level', 'sound_types', 'intensity']
@@ -1180,9 +1194,12 @@ class DataExporter:
                         'intensity': f"{target.intensity:.2f}"
                     })
             print(f"[EXPORT] CSV exported to {filename}")
+            print(f"[EXPORT] Saved {len(targets)} targets")
             return True
         except Exception as e:
-            print(f"[EXPORT] Error: {e}")
+            print(f"[EXPORT] Error exporting CSV: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @staticmethod
@@ -2605,9 +2622,16 @@ def handle_keyboard_shortcuts(event):
         # Screenshot
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshots/screenshot_{timestamp}.png"
-        pygame.image.save(screen, filename)
-        print(f"[SCREENSHOT] Saved to {filename}")
-        sound_system.play_ui_click()  # NEW
+        
+        # Ensure directory exists
+        os.makedirs("screenshots", exist_ok=True)
+        
+        try:
+            pygame.image.save(screen, filename)
+            print(f"[SCREENSHOT] Saved to {filename}")
+            sound_system.play_ui_click()
+        except Exception as e:
+            print(f"[SCREENSHOT] Error saving: {e}")
     
     # Sound controls (NEW)
     elif event.key == pygame.K_v:
