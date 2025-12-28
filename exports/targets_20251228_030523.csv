@@ -1,3 +1,0 @@
-timestamp,id,bearing,range_nm,velocity,threat_level,sound_types,intensity
-2025-12-28T03:05:23.145247,10,-13.6,0.17,0.0,UNKNOWN,Low Frequency Rumble,0.08
-2025-12-28T03:05:23.145247,11,7.8,0.13,0.0,NEUTRAL,Voice/Machinery,0.06
