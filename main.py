@@ -2284,7 +2284,7 @@ class DataExporter:
                     "threat_level": target.threat_level,
                     "sound_types": target.sound_types,
                     "intensity": target.intensity,
-                    "position_history": list(target.position_history)
+                    "position_history": []
                 })
             
             with open(filename, 'w') as f:
@@ -4181,28 +4181,39 @@ def handle_keyboard_shortcuts(event):
         sound_system.play_ui_click()
 
     elif event.key == pygame.K_e:
-        # Export torpedo alert log
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"exports/torpedo_alerts_{timestamp}.json"
-        
-        alerts = list(torpedo_detector.torpedo_alerts)
-        active_torpedoes = torpedo_detector.get_active_torpedoes()
-        
-        export_data = {
-            "timestamp": time.time(),
-            "alerts": alerts,
-            "active_torpedoes": active_torpedoes,
-            "decoys_deployed": torpedo_detector.acoustic_decoys
-        }
-        
+
         try:
-            with open(filename, 'w') as f:
+            if torpedo_detector is None:
+                print("[TORPEDO] Torpedo detector not initialized")
+                return False  # do NOT terminate the app
+
+            alerts = list(torpedo_detector.torpedo_alerts)
+            active_torpedoes = torpedo_detector.get_active_torpedoes()
+
+            export_data = {
+                "timestamp": time.time(),
+                "alerts": alerts,
+                "active_torpedoes": active_torpedoes,
+                "decoys_deployed": torpedo_detector.acoustic_decoys
+            }
+
+            os.makedirs("exports", exist_ok=True)
+
+            with open(filename, "w") as f:
                 json.dump(export_data, f, indent=2)
+
             print(f"[TORPEDO] Alerts exported to {filename}")
+
         except Exception as e:
             print(f"[TORPEDO] Export error: {e}")
-        sound_system.play_ui_click()
 
+        sound_system.play_ui_click()
+    
+    return True  # Continue running - don't exit
+
+    
 def draw_cpa_visualization():
     """Draw CPA (Closest Point of Approach) visualization on radar"""
     
